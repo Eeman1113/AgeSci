@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-Enhanced Multi-Agent Research Paper Generator v2.0
-===================================================
 Fully autonomous - just provide a topic and get a complete IEEE-style paper.
 
 FREE TOOLS USED:
