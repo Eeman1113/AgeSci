@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""
-Enhanced Multi-Agent Research Paper Generator v2.0
-===================================================
-Fully autonomous - just provide a topic and get a complete IEEE-style paper.
 
-FREE TOOLS USED:
-- arXiv API (real academic citations)
-- Semantic Scholar API (paper summaries & references)
-- CrossRef API (DOI lookup)
-- language_tool_python (grammar checking)
-- chktex (LaTeX linting)
-- DuckDuckGo Search (general research)
-
-Install requirements:
-    pip install ollama requests language-tool-python duckduckgo-search arxiv
-
-Author: Enhanced by Claude
-"""
 
 import os
 import json
