@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
+"""
+Enhanced Multi-Agent Research Paper Generator v2.0
+===================================================
+Fully autonomous - just provide a topic and get a complete IEEE-style paper.
 
+FREE TOOLS USED:
+- arXiv API (real academic citations)
+- Semantic Scholar API (paper summaries & references)
+- CrossRef API (DOI lookup)
+- language_tool_python (grammar checking)
+- chktex (LaTeX linting)
+- DuckDuckGo Search (general research)
+
+Install requirements:
+    pip install ollama requests language-tool-python duckduckgo-search arxiv
+
+Author: Enhanced by Claude
+"""
 
 import os
 import json
@@ -109,24 +126,19 @@ class Logger:
     def warning(self, msg: str): self._log("WARNING", msg, "⚠️")
     def error(self, msg: str): self._log("ERROR", msg, "❌")
     def phase(self, msg: str): self._log("PHASE", f"\n{'─'*50}\n{msg}\n{'─'*50}", "📋")
-    def agent(self, name: str, msg: str): self._log("AGENT", f"[{name}] {msg}", "🤖")
+    def agent(self, name: str, msg: str): 
+        """Log agent activity - minimal console output"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        # Just log to file, console will see streaming output
+        with open(self.log_path, 'a', encoding='utf-8') as f:
+            f.write(f"[AGENT] [{timestamp}] 🤖 [{name}] {msg}\n")
     
     def thinking(self, agent_name: str, thinking_content: str):
-        """Log model's thinking/reasoning process"""
+        """Log model's thinking/reasoning to file"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         separator = "─" * 60
         
-        # Console output (abbreviated)
-        lines = thinking_content.strip().split('\n')
-        preview_lines = lines[:5]  # First 5 lines
-        preview = '\n      '.join(preview_lines)
-        if len(lines) > 5:
-            preview += f"\n      ... ({len(lines) - 5} more lines)"
-        
-        print(f"[{timestamp}] 🧠 [{agent_name}] THINKING:")
-        print(f"      {preview}")
-        
-        # Full thinking to file
+        # Save full thinking to file only (already streamed to console)
         with open(self.thinking_log_path, 'a', encoding='utf-8') as f:
             f.write(f"\n{separator}\n")
             f.write(f"[{timestamp}] AGENT: {agent_name}\n")
@@ -135,28 +147,22 @@ class Logger:
             f.write(f"{separator}\n\n")
     
     def verbose_input(self, agent_name: str, prompt: str):
-        """Log full input prompt"""
+        """Log full input prompt to file only"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         with open(self.verbose_log_path, 'a', encoding='utf-8') as f:
             f.write(f"\n{'='*60}\n")
             f.write(f"[{timestamp}] INPUT TO: {agent_name}\n")
             f.write(f"{'='*60}\n")
             f.write(f"{prompt}\n")
-        
-        if CONFIG.verbose_logging:
-            print(f"[{timestamp}] 📥 [{agent_name}] Input: {prompt[:100]}...")
     
     def verbose_output(self, agent_name: str, response: str):
-        """Log full output response"""
+        """Log full output response to file only"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         with open(self.verbose_log_path, 'a', encoding='utf-8') as f:
             f.write(f"\n{'-'*60}\n")
             f.write(f"[{timestamp}] OUTPUT FROM: {agent_name}\n")
             f.write(f"{'-'*60}\n")
             f.write(f"{response}\n")
-        
-        if CONFIG.verbose_logging:
-            print(f"[{timestamp}] 📤 [{agent_name}] Output: {response[:100]}...")
 
 
 LOG = Logger(CONFIG.output_dir)
@@ -211,6 +217,10 @@ class ArxivTool:
     def extract_search_terms_with_llm(topic: str) -> List[str]:
         """Use LLM to extract the best search terms from any topic"""
         
+        print(f"\n{'─'*60}")
+        print(f"🔍 [Keyword Extractor]")
+        print(f"{'─'*60}")
+        
         prompt = f"""Extract 5-7 precise academic search keywords from this research topic.
 
 TOPIC: {topic}
@@ -228,18 +238,44 @@ EXAMPLE OUTPUT:
 OUTPUT (JSON array only):"""
 
         try:
-            response = ollama.chat(
+            # Stream the keyword extraction too
+            stream = ollama.chat(
                 model=CONFIG.model,
                 messages=[{'role': 'user', 'content': prompt}],
-                options={'temperature': 0.3},  # Low temp for consistent extraction
-                think=False,  # No thinking needed for simple extraction
-                stream=False,
+                options={'temperature': 0.3},
+                think=True,
+                stream=True,
             )
             
-            # Access response using attribute syntax (not dict)
-            content = response.message.content
+            thinking_content = ""
+            content = ""
+            thinking_started = False
+            content_started = False
             
-            # Clean up response - remove thinking tags if present
+            for chunk in stream:
+                if hasattr(chunk, 'message') and chunk.message:
+                    chunk_thinking = getattr(chunk.message, 'thinking', None)
+                    if chunk_thinking:
+                        if not thinking_started:
+                            thinking_started = True
+                            print(f"   🧠 THINKING:\n   ", end='', flush=True)
+                        print(chunk_thinking, end='', flush=True)
+                        thinking_content += chunk_thinking
+                    
+                    chunk_content = getattr(chunk.message, 'content', None)
+                    if chunk_content:
+                        if not content_started:
+                            content_started = True
+                            if thinking_started:
+                                print(f"\n\n   📝 KEYWORDS:\n   ", end='', flush=True)
+                            else:
+                                print(f"   📝 KEYWORDS:\n   ", end='', flush=True)
+                        print(chunk_content, end='', flush=True)
+                        content += chunk_content
+            
+            print("\n", flush=True)
+            
+            # Clean up response
             content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
             content = content.strip()
             
@@ -247,9 +283,8 @@ OUTPUT (JSON array only):"""
             match = re.search(r'\[.*?\]', content, re.DOTALL)
             if match:
                 keywords = json.loads(match.group())
-                # Filter out empty strings and clean up
                 keywords = [k.strip() for k in keywords if k.strip() and len(k.strip()) > 2]
-                LOG.info(f"LLM extracted keywords: {keywords}")
+                LOG.info(f"Extracted keywords: {keywords}")
                 return keywords[:7]
         except Exception as e:
             LOG.warning(f"LLM keyword extraction failed: {e}")
@@ -632,7 +667,13 @@ class Agent:
     
     @retry(max_attempts=CONFIG.max_retries, delay=CONFIG.retry_delay)
     def think(self, user_input: str, use_tools: bool = True) -> str:
-        """Process input and generate response with thinking mode"""
+        """Process input and generate response with real-time streaming"""
+        
+        # Print clear header
+        print(f"\n{'─'*60}")
+        print(f"🤖 [{self.name}]")
+        print(f"{'─'*60}")
+        
         LOG.agent(self.name, f"Processing: {user_input[:80]}...")
         
         # Build context from tools if needed
@@ -666,68 +707,50 @@ class Agent:
         content = ""
         
         if CONFIG.enable_thinking:
-            # Stream to capture both thinking and content
-            print(f"   ⏳ [{self.name}] Waiting for model response...", flush=True)
-            
             try:
                 stream = ollama.chat(
                     model=CONFIG.model,
                     messages=messages,
                     options={'temperature': CONFIG.temperature},
-                    think=True,  # Enable thinking
+                    think=True,
                     stream=True,
                 )
                 
                 thinking_started = False
                 content_started = False
-                chunk_count = 0
                 
                 for chunk in stream:
-                    chunk_count += 1
-                    
-                    # Handle thinking chunks
                     if hasattr(chunk, 'message') and chunk.message:
-                        # Check for thinking
+                        # Stream thinking in real-time
                         chunk_thinking = getattr(chunk.message, 'thinking', None)
                         if chunk_thinking:
                             if not thinking_started:
                                 thinking_started = True
-                                print(f"   🧠 [{self.name}] Thinking", end='', flush=True)
-                            if chunk_count % 20 == 0:  # Print dot every 20 chunks
-                                print(".", end='', flush=True)
+                                print(f"\n   🧠 [{self.name}] THINKING:\n   ", end='', flush=True)
+                            print(chunk_thinking, end='', flush=True)
                             thinking_content += chunk_thinking
                         
-                        # Check for content
+                        # Stream content in real-time
                         chunk_content = getattr(chunk.message, 'content', None)
                         if chunk_content:
-                            if thinking_started and not content_started:
+                            if not content_started:
                                 content_started = True
-                                print(f" ({len(thinking_content)} chars)", flush=True)
-                                print(f"   ✍️  [{self.name}] Writing", end='', flush=True)
-                            elif not content_started:
-                                content_started = True
-                                print(f"   ✍️  [{self.name}] Writing", end='', flush=True)
-                            
-                            if len(content) % 500 == 0 and len(content) > 0:
-                                print(".", end='', flush=True)
+                                if thinking_started:
+                                    print(f"\n\n   ✍️  [{self.name}] RESPONSE:\n   ", end='', flush=True)
+                                else:
+                                    print(f"\n   ✍️  [{self.name}] RESPONSE:\n   ", end='', flush=True)
+                            print(chunk_content, end='', flush=True)
                             content += chunk_content
                 
-                # Finish progress line
-                if content_started:
-                    print(f" ({len(content)} chars) ✓", flush=True)
-                elif thinking_started:
-                    print(" ✓", flush=True)
-                else:
-                    print(f"   ⚠️  [{self.name}] No response chunks received", flush=True)
+                # End with newline
+                print("\n", flush=True)
                 
-                # Log thinking if captured
+                # Log thinking to file
                 if thinking_content and CONFIG.log_thinking:
                     LOG.thinking(self.name, thinking_content)
                     
             except Exception as e:
                 LOG.warning(f"Streaming failed: {e}, falling back to non-streaming")
-                # Fallback to non-streaming
-                print(f"   🔄 [{self.name}] Retrying without streaming...", flush=True)
                 response = ollama.chat(
                     model=CONFIG.model,
                     messages=messages,
@@ -735,10 +758,10 @@ class Agent:
                     stream=False,
                 )
                 content = response.message.content
-                print(f"   ✓ [{self.name}] Response received", flush=True)
+                print(f"\n   ✍️  [{self.name}] RESPONSE:\n   {content}\n", flush=True)
         else:
-            # Non-streaming, no thinking
-            print(f"   ⏳ [{self.name}] Generating response...", flush=True)
+            # Non-streaming
+            print(f"   ⏳ [{self.name}] Generating...", end='', flush=True)
             response = ollama.chat(
                 model=CONFIG.model,
                 messages=messages,
@@ -747,7 +770,7 @@ class Agent:
                 stream=False,
             )
             content = response.message.content
-            print(f"   ✓ [{self.name}] Done ({len(content)} chars)", flush=True)
+            print(f" done!\n   ✍️  RESPONSE:\n   {content[:500]}{'...' if len(content) > 500 else ''}\n", flush=True)
         
         # Log full output
         LOG.verbose_output(self.name, content)
@@ -1106,10 +1129,10 @@ class ResearchPaperGenerator:
         """Phase 2: Gather research from real sources with LLM-guided searches"""
         LOG.phase("PHASE 2: RESEARCH & CITATION GATHERING")
         
-        # Use LLM to extract optimal search keywords
-        LOG.info("Using LLM to extract search keywords...")
+        # Use LLM to extract optimal search keywords (streams in real-time)
         keywords = ArxivTool.extract_search_terms_with_llm(self.topic)
-        LOG.success(f"Keywords: {keywords}")
+        
+        print(f"\n✅ Using keywords: {keywords}\n")
         
         all_arxiv_papers = []
         
@@ -1202,9 +1225,12 @@ class ResearchPaperGenerator:
         for p in self.all_papers[:15]:  # Top 15 papers
             citation_context += f"- \\cite{{{p['cite_key']}}}: {p['title'][:80]}... ({p['year']})\n"
         
-        for section in self.plan['sections']:
+        for idx, section in enumerate(self.plan['sections']):
             section_title = section['title']
-            LOG.info(f"\n📝 Writing: {section_title}")
+            
+            print(f"\n{'═'*60}")
+            print(f"📝 SECTION {idx+1}/{len(self.plan['sections'])}: {section_title}")
+            print(f"{'═'*60}")
             
             # Write with multiple attempts if needed
             passed = False
@@ -1214,6 +1240,7 @@ class ResearchPaperGenerator:
             
             while not passed and attempts < CONFIG.max_rewrites:
                 attempts += 1
+                print(f"\n--- Attempt {attempts}/{CONFIG.max_rewrites} ---")
                 
                 # Build comprehensive prompt
                 prompt = f"""Write the '{section_title}' section.
@@ -1234,9 +1261,10 @@ Write a complete, publication-ready section. Use the real citations provided abo
                 if CONFIG.enable_grammar_check:
                     _, grammar_issues = GrammarTool.check(draft)
                     if grammar_issues:
-                        LOG.warning(f"Grammar issues: {grammar_issues[:2]}")
+                        print(f"   ⚠️  Grammar issues: {grammar_issues[:2]}")
                 
                 # Peer review
+                print(f"\n--- Peer Review ---")
                 review_prompt = f"""Review this section titled '{section_title}':
 
 {draft}
@@ -1252,16 +1280,16 @@ Evaluate against IEEE standards."""
                     
                     if status == 'PASS' or total_score >= 35:
                         passed = True
-                        LOG.success(f"Approved (attempt {attempts}, score: {total_score}/50)")
+                        print(f"\n✅ APPROVED (attempt {attempts}, score: {total_score}/50)")
                     else:
                         feedback = review.get('feedback', '')
                         major = review.get('major_issues', [])
-                        LOG.warning(f"Revision needed (score: {total_score}/50)")
+                        print(f"\n⚠️  REVISION NEEDED (score: {total_score}/50)")
                         if major:
-                            LOG.warning(f"Major issues: {major[0]}")
+                            print(f"   Major issue: {major[0][:100]}...")
                             
                 except json.JSONDecodeError:
-                    LOG.warning("Could not parse review, passing by default")
+                    print(f"\n⚠️  Could not parse review, passing by default")
                     passed = True
             
             # Store section
@@ -1272,7 +1300,7 @@ Evaluate against IEEE standards."""
             
             # Generate diagram if needed
             if section.get('needs_diagram', False):
-                LOG.info(f"  🎨 Generating diagram for {section_title}...")
+                print(f"\n--- Generating Diagram ---")
                 diagram_prompt = f"""Create a TikZ diagram for the '{section_title}' section.
                 
 Context: {section.get('description', '')}
