@@ -117,10 +117,14 @@ class Logger:
         separator = "─" * 60
         
         # Console output (abbreviated)
-        print(f"[{timestamp}] 🧠 [{agent_name}] THINKING...")
-        # Show first 500 chars of thinking in console
-        preview = thinking_content[:500] + "..." if len(thinking_content) > 500 else thinking_content
-        print(f"    {preview}")
+        lines = thinking_content.strip().split('\n')
+        preview_lines = lines[:5]  # First 5 lines
+        preview = '\n      '.join(preview_lines)
+        if len(lines) > 5:
+            preview += f"\n      ... ({len(lines) - 5} more lines)"
+        
+        print(f"[{timestamp}] 🧠 [{agent_name}] THINKING:")
+        print(f"      {preview}")
         
         # Full thinking to file
         with open(self.thinking_log_path, 'a', encoding='utf-8') as f:
@@ -227,13 +231,15 @@ OUTPUT (JSON array only):"""
             response = ollama.chat(
                 model=CONFIG.model,
                 messages=[{'role': 'user', 'content': prompt}],
-                options={'temperature': 0.3}  # Low temp for consistent extraction
+                options={'temperature': 0.3},  # Low temp for consistent extraction
+                think=False,  # No thinking needed for simple extraction
+                stream=False,
             )
             
-            content = response['message']['content']
+            # Access response using attribute syntax (not dict)
+            content = response.message.content
             
-            # Clean up response - extract JSON array
-            # Remove thinking tags if present
+            # Clean up response - remove thinking tags if present
             content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
             content = content.strip()
             
@@ -655,52 +661,51 @@ class Agent:
         # Log full input
         LOG.verbose_input(self.name, f"SYSTEM: {full_system_prompt}\n\nUSER: {user_input}")
         
-        # Build options for ollama
-        options = {
-            'temperature': CONFIG.temperature,
-        }
-        
         # Call model with or without thinking mode
-        try:
-            if CONFIG.enable_thinking:
-                # For Qwen3 models, thinking is enabled via the 'think' parameter
-                response = ollama.chat(
-                    model=CONFIG.model,
-                    messages=messages,
-                    options=options,
-                    think=True  # Enable thinking mode
-                )
-            else:
-                response = ollama.chat(
-                    model=CONFIG.model,
-                    messages=messages,
-                    options=options
-                )
-        except TypeError:
-            # Fallback if 'think' parameter not supported in this ollama version
-            LOG.warning(f"Thinking mode not supported, falling back to standard mode")
+        thinking_content = ""
+        content = ""
+        
+        if CONFIG.enable_thinking:
+            # Stream to capture both thinking and content
+            LOG.info(f"[{self.name}] Streaming with thinking enabled...")
+            
+            stream = ollama.chat(
+                model=CONFIG.model,
+                messages=messages,
+                options={'temperature': CONFIG.temperature},
+                think=True,  # Enable thinking - direct parameter!
+                stream=True,
+            )
+            
+            in_thinking = False
+            for chunk in stream:
+                # Handle thinking chunks
+                if hasattr(chunk, 'message'):
+                    if hasattr(chunk.message, 'thinking') and chunk.message.thinking:
+                        if not in_thinking:
+                            in_thinking = True
+                            if CONFIG.verbose_logging:
+                                print(f"   🧠 [{self.name}] Thinking...", flush=True)
+                        thinking_content += chunk.message.thinking
+                    
+                    # Handle content chunks
+                    if hasattr(chunk.message, 'content') and chunk.message.content:
+                        if in_thinking:
+                            in_thinking = False
+                        content += chunk.message.content
+            
+            # Log thinking if captured
+            if thinking_content and CONFIG.log_thinking:
+                LOG.thinking(self.name, thinking_content)
+        else:
+            # Non-streaming, no thinking
             response = ollama.chat(
                 model=CONFIG.model,
                 messages=messages,
-                options=options
+                options={'temperature': CONFIG.temperature},
+                stream=False,
             )
-        
-        # Extract content and thinking
-        content = response['message']['content']
-        
-        # Check for thinking in response (Qwen3 format)
-        thinking_content = response['message'].get('thinking', '')
-        
-        # Also check if thinking is embedded in content with <think> tags
-        think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
-        if think_match:
-            thinking_content = think_match.group(1)
-            # Remove thinking from content
-            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-        
-        # Log thinking if present
-        if thinking_content and CONFIG.log_thinking:
-            LOG.thinking(self.name, thinking_content)
+            content = response.message.content
         
         # Log full output
         LOG.verbose_output(self.name, content)
@@ -708,6 +713,10 @@ class Agent:
         # Update history
         self.conversation_history.append({'role': 'user', 'content': user_input})
         self.conversation_history.append({'role': 'assistant', 'content': content})
+        
+        # If thinking was captured, also store it
+        if thinking_content:
+            self.conversation_history[-1]['thinking'] = thinking_content
         
         return content
     
