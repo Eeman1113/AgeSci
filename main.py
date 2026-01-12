@@ -15,6 +15,11 @@ FREE TOOLS USED:
 Install requirements:
     pip install ollama requests language-tool-python duckduckgo-search arxiv
     sudo apt update && sudo apt install -y texlive-latex-base texlive-latex-extra texlive-fonts-recommended texlive-science texlive-bibtex-extra biber chktex && pip install ollama requests duckduckgo-search language-tool-python
+
+    macos:
+    brew update && brew install --cask mactex && brew install chktex && pip install ollama requests duckduckgo-search language-tool-python
+    eval "$(/usr/libexec/path_helper)"
+    
 """
 
 import os
