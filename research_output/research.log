@@ -1,0 +1,152 @@
+======================================================================
+RESEARCH PAPER GENERATION - 2026-01-12 17:46:21.773922
+======================================================================
+
+[INFO] [17:47:06] ℹ️ Starting paper generation for: Selective Concept Unlearning Without Catastrophic Forgetting Most current methods (like gradient ascent or ROME-style edits) struggle to surgically remove specific knowledge without degrading general capabilities. A paper proposing a new technique that better preserves model utility while ensuring complete removal would be valuable. IN LLMS
+[PHASE] [17:47:06] 📋 
+──────────────────────────────────────────────────
+PHASE 1: ARCHITECTURE & PLANNING
+──────────────────────────────────────────────────
+[AGENT] [17:47:06] 🤖 [Architect] Processing: Create a comprehensive IEEE paper structure for the topic: Selective Concept Unl...
+[SUCCESS] [17:49:59] ✅ Paper planned: Selective Concept Unlearning in Large Language Models: A Dual-Path Architecture to Prevent Catastrophic Forgetting
+[INFO] [17:49:59] ℹ️ Sections: ['Introduction', 'Related Work', 'Methodology', 'Results and Discussion', 'Conclusion']
+[PHASE] [17:49:59] 📋 
+──────────────────────────────────────────────────
+PHASE 2: RESEARCH & CITATION GATHERING
+──────────────────────────────────────────────────
+[INFO] [17:54:51] ℹ️ Extracted keywords: ['selective unlearning', 'catastrophic forgetting', 'knowledge editing', 'gradient ascent', 'ROME', 'LLM', 'model utility']
+[INFO] [17:54:51] ℹ️ Search 1 - Main keywords: 'selective unlearning catastrophic forgetting knowledge editing gradient ascent'
+[INFO] [17:54:51] ℹ️ arXiv search query: 'selective unlearning catastrophic forgetting knowledge editing gradient ascent'
+[INFO] [17:54:52] ℹ️   → Found 10 papers
+[INFO] [17:54:52] ℹ️ Search 2 - Alt keywords: 'knowledge editing gradient ascent ROME'
+[INFO] [17:54:52] ℹ️ arXiv search query: 'knowledge editing gradient ascent ROME'
+[INFO] [17:54:53] ℹ️   → Found 8 papers
+[INFO] [17:54:53] ℹ️ Search 3 - From title: 'Large Language Models Dual-Path Prevent Catastrophic Forgetting'
+[INFO] [17:54:53] ℹ️ arXiv search query: 'Large Language Models Dual-Path Prevent Catastrophic Forgetting'
+[INFO] [17:54:54] ℹ️   → Found 5 papers
+[SUCCESS] [17:54:54] ✅ Found 18 unique papers on arXiv
+[INFO] [17:54:54] ℹ️   📄 Overcoming Catastrophic Forgetting by XAI... [nguyen2022overcoming]
+[INFO] [17:54:54] ℹ️   📄 A Theoretical Analysis of Catastrophic Forgetting through th... [doan2020a]
+[INFO] [17:54:54] ℹ️   📄 Does the Adam Optimizer Exacerbate Catastrophic Forgetting?... [ashley2021does]
+[INFO] [17:54:54] ℹ️   📄 Artificial Neural Variability for Deep Learning: On Overfitt... [xie2020artificial]
+[INFO] [17:54:54] ℹ️   📄 Mitigating Catastrophic Forgetting in Mathematical Reasoning... [reynolds2025mitigating]
+[INFO] [17:54:54] ℹ️   📄 OPC: One-Point-Contraction Unlearning Toward Deep Feature Fo... [jung2025opc]
+[INFO] [17:54:54] ℹ️   📄 CUFG: Curriculum Unlearning Guided by the Forgetting Gradien... [miao2025cufg]
+[INFO] [17:54:54] ℹ️ Searching Semantic Scholar...
+[INFO] [17:54:54] ℹ️ Semantic Scholar query: 'selective unlearning catastrophic forgetting knowledge editing'
+[WARNING] [17:54:55] ⚠️ Semantic Scholar rate limited, waiting...
+[WARNING] [17:55:00] ⚠️ Semantic Scholar returned status 429
+[SUCCESS] [17:55:00] ✅ Total unique papers for citation: 18
+[INFO] [17:55:00] ℹ️ All available citations:
+  - [nguyen2022overcoming] Overcoming Catastrophic Forgetting by XAI
+  - [doan2020a] A Theoretical Analysis of Catastrophic Forgetting through the NTK Overlap Matrix
+  - [ashley2021does] Does the Adam Optimizer Exacerbate Catastrophic Forgetting?
+  - [xie2020artificial] Artificial Neural Variability for Deep Learning: On Overfitting, Noise Memorization, and Catastrophic Forgetting
+  - [reynolds2025mitigating] Mitigating Catastrophic Forgetting in Mathematical Reasoning Finetuning through Mixed Training
+  - [jung2025opc] OPC: One-Point-Contraction Unlearning Toward Deep Feature Forgetting
+  - [miao2025cufg] CUFG: Curriculum Unlearning Guided by the Forgetting Gradient
+  - [pang2025label] Label Smoothing Improves Gradient Ascent in LLM Unlearning
+  - [spohn2025alignthenunlearn] Align-then-Unlearn: Embedding Alignment for LLM Unlearning
+  - [gupta2024model] Model Editing at Scale leads to Gradual and Catastrophic Forgetting
+  - [ge2024how] How Well Can Knowledge Edit Methods Edit Perplexing Knowledge?
+  - [rushworth2018ascent] Ascent sliceness
+  - [gupta2024rebuilding] Rebuilding ROME : Resolving Model Collapse during Sequential Model Editing
+  - [wu2016the] The Parallel Knowledge Gradient Method for Batch Bayesian Optimization
+  - [cai2024freemask] FreeMask: Rethinking the Importance of Attention Masks for Zero-Shot Video Editing
+  - [lee2019knowledge] Knowledge Query Network: How Knowledge Interacts with Skills
+  - [ge2024understanding] Understanding Language Model Circuits through Knowledge Editing
+  - [pan2023unifying] Unifying Large Language Models and Knowledge Graphs: A Roadmap
+[PHASE] [17:55:00] 📋 
+──────────────────────────────────────────────────
+PHASE 3: WRITING & PEER REVIEW
+──────────────────────────────────────────────────
+[AGENT] [17:55:00] 🤖 [Scholar] Processing: Write the 'Introduction' section.
+
+SECTION DETAILS:
+{
+  "title": "Introduction",...
+[INFO] [18:10:09] ℹ️ Initializing grammar tool (first run downloads ~1GB)...
+[WARNING] [18:10:09] ⚠️ Grammar tool init failed: Command '['/usr/bin/java', '-version']' returned non-zero exit status 1.
+[AGENT] [18:10:09] 🤖 [Critic] Processing: Review this section titled 'Introduction':
+
+To address the challenge of maintain...
+[AGENT] [18:12:46] 🤖 [Scholar] Processing: Write the 'Introduction' section.
+
+SECTION DETAILS:
+{
+  "title": "Introduction",...
+[AGENT] [18:14:16] 🤖 [Critic] Processing: Review this section titled 'Introduction':
+
+\subsection*{Background: LLMs and Fo...
+[AGENT] [18:15:10] 🤖 [Scholar] Processing: Write the 'Related Work' section.
+
+SECTION DETAILS:
+{
+  "title": "Related Work",...
+[AGENT] [18:19:40] 🤖 [Critic] Processing: Review this section titled 'Related Work':
+
+\subsection*{Gradient-based unlearni...
+[AGENT] [18:24:34] 🤖 [Scholar] Processing: Write the 'Methodology' section.
+
+SECTION DETAILS:
+{
+  "title": "Methodology",
+ ...
+[AGENT] [18:28:32] 🤖 [Critic] Processing: Review this section titled 'Methodology':
+
+### Dual-Path Architecture for Target...
+[AGENT] [18:33:24] 🤖 [Artist] Processing: Create a TikZ diagram for the 'Methodology' section.
+                
+Context: T...
+[AGENT] [18:39:33] 🤖 [Scholar] Processing: Write the 'Results and Discussion' section.
+
+SECTION DETAILS:
+{
+  "title": "Resu...
+[AGENT] [18:45:15] 🤖 [Critic] Processing: Review this section titled 'Results and Discussion':
+
+### Concept Removal Evalua...
+[AGENT] [18:48:36] 🤖 [Artist] Processing: Create a TikZ diagram for the 'Results and Discussion' section.
+                ...
+[AGENT] [19:27:15] 🤖 [Scholar] Processing: Write the 'Conclusion' section.
+
+SECTION DETAILS:
+{
+  "title": "Conclusion",
+  "...
+[AGENT] [19:28:44] 🤖 [Critic] Processing: Review this section titled 'Conclusion':
+
+This work introduces a dual-path archi...
+[PHASE] [19:34:41] 📋 
+──────────────────────────────────────────────────
+PHASE 4: BIBLIOGRAPHY GENERATION
+──────────────────────────────────────────────────
+[INFO] [19:34:41] ℹ️ Citations used in paper: 18
+[WARNING] [19:34:41] ⚠️ Unknown citation key: nguyen2022catastrophic
+[WARNING] [19:34:41] ⚠️ Unknown citation key: miao2025contextual
+[WARNING] [19:34:41] ⚠️ Unknown citation key: jung2025optimized
+[WARNING] [19:34:41] ⚠️ Unknown citation key: gupta2024reinforcement
+[SUCCESS] [19:34:41] ✅ Saved: research_output/references.bib
+[SUCCESS] [19:34:41] ✅ Generated 18 bibliography entries
+[PHASE] [19:34:41] 📋 
+──────────────────────────────────────────────────
+PHASE 5: DOCUMENT ASSEMBLY
+──────────────────────────────────────────────────
+[SUCCESS] [19:34:41] ✅ Saved: research_output/references.bib
+[SUCCESS] [19:34:41] ✅ Saved: research_output/main.tex
+[SUCCESS] [19:34:41] ✅ Document assembled
+[PHASE] [19:34:41] 📋 
+──────────────────────────────────────────────────
+PHASE 6: PDF COMPILATION
+──────────────────────────────────────────────────
+[INFO] [19:34:41] ℹ️ Running BibTeX...
+[WARNING] [19:34:41] ⚠️ BibTeX step failed: [Errno 2] No such file or directory: 'pdflatex'
+[INFO] [19:34:41] ℹ️ Compiling main.tex...
+[WARNING] [19:34:41] ⚠️ Compilation failed (attempt 1)
+[INFO] [19:34:41] ℹ️ Attempting to fix errors...
+[AGENT] [19:34:41] 🤖 [Typesetter] Processing: Fix these LaTeX errors:
+
+ERROR LOG:
+pdflatex not found. Install texlive.
+
+DOCUME...
