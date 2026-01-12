@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""
-Fully autonomous - just provide a topic and get a complete IEEE-style paper.
 
-FREE TOOLS USED:
-- arXiv API (real academic citations)
-- Semantic Scholar API (paper summaries & references)
-- CrossRef API (DOI lookup)
-- language_tool_python (grammar checking)
-- chktex (LaTeX linting)
-- DuckDuckGo Search (general research)
-
-Install requirements:
-    pip install ollama requests language-tool-python duckduckgo-search arxiv
-    sudo apt update && sudo apt install -y texlive-latex-base texlive-latex-extra texlive-fonts-recommended texlive-science texlive-bibtex-extra biber chktex && pip install ollama requests duckduckgo-search language-tool-python
-
-    macos:
-    brew update && brew install --cask mactex && brew install chktex && pip install ollama requests duckduckgo-search language-tool-python
-    eval "$(/usr/libexec/path_helper)"
-    
-"""
 
 import os
 import json
@@ -51,6 +32,7 @@ class Config:
     # Model settings
     model: str = "qwen3-vl:latest"
     temperature: float = 0.7
+    enable_thinking: bool = True  # Show model's reasoning process
     
     # Output settings
     output_dir: str = "research_output"
@@ -74,6 +56,10 @@ class Config:
     enable_grammar_check: bool = True
     enable_latex_lint: bool = True
     parallel_sections: bool = False  # Set True if your machine can handle it
+    
+    # Logging
+    verbose_logging: bool = True  # Log all inputs/outputs
+    log_thinking: bool = True  # Log model thinking process
 
 
 CONFIG = Config()
@@ -85,19 +71,36 @@ os.makedirs(CONFIG.output_dir, exist_ok=True)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class Logger:
-    """Clean logging to both console and file"""
+    """Enhanced logging with verbose mode for debugging"""
     
     def __init__(self, output_dir: str):
         self.log_path = os.path.join(output_dir, "research.log")
+        self.thinking_log_path = os.path.join(output_dir, "thinking.log")
+        self.verbose_log_path = os.path.join(output_dir, "verbose.log")
+        
+        # Initialize main log
         with open(self.log_path, 'w', encoding='utf-8') as f:
             f.write(f"{'='*70}\n")
             f.write(f"RESEARCH PAPER GENERATION - {datetime.datetime.now()}\n")
             f.write(f"{'='*70}\n\n")
+        
+        # Initialize thinking log
+        with open(self.thinking_log_path, 'w', encoding='utf-8') as f:
+            f.write(f"{'='*70}\n")
+            f.write(f"MODEL THINKING LOG - {datetime.datetime.now()}\n")
+            f.write(f"{'='*70}\n\n")
+        
+        # Initialize verbose log
+        with open(self.verbose_log_path, 'w', encoding='utf-8') as f:
+            f.write(f"{'='*70}\n")
+            f.write(f"VERBOSE LOG (ALL INPUTS/OUTPUTS) - {datetime.datetime.now()}\n")
+            f.write(f"{'='*70}\n\n")
     
-    def _log(self, level: str, msg: str, icon: str = ""):
+    def _log(self, level: str, msg: str, icon: str = "", console: bool = True):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         formatted = f"[{timestamp}] {icon} {msg}"
-        print(formatted)
+        if console:
+            print(formatted)
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{level}] {formatted}\n")
     
@@ -107,6 +110,49 @@ class Logger:
     def error(self, msg: str): self._log("ERROR", msg, "❌")
     def phase(self, msg: str): self._log("PHASE", f"\n{'─'*50}\n{msg}\n{'─'*50}", "📋")
     def agent(self, name: str, msg: str): self._log("AGENT", f"[{name}] {msg}", "🤖")
+    
+    def thinking(self, agent_name: str, thinking_content: str):
+        """Log model's thinking/reasoning process"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        separator = "─" * 60
+        
+        # Console output (abbreviated)
+        print(f"[{timestamp}] 🧠 [{agent_name}] THINKING...")
+        # Show first 500 chars of thinking in console
+        preview = thinking_content[:500] + "..." if len(thinking_content) > 500 else thinking_content
+        print(f"    {preview}")
+        
+        # Full thinking to file
+        with open(self.thinking_log_path, 'a', encoding='utf-8') as f:
+            f.write(f"\n{separator}\n")
+            f.write(f"[{timestamp}] AGENT: {agent_name}\n")
+            f.write(f"{separator}\n")
+            f.write(f"{thinking_content}\n")
+            f.write(f"{separator}\n\n")
+    
+    def verbose_input(self, agent_name: str, prompt: str):
+        """Log full input prompt"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        with open(self.verbose_log_path, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"[{timestamp}] INPUT TO: {agent_name}\n")
+            f.write(f"{'='*60}\n")
+            f.write(f"{prompt}\n")
+        
+        if CONFIG.verbose_logging:
+            print(f"[{timestamp}] 📥 [{agent_name}] Input: {prompt[:100]}...")
+    
+    def verbose_output(self, agent_name: str, response: str):
+        """Log full output response"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        with open(self.verbose_log_path, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'-'*60}\n")
+            f.write(f"[{timestamp}] OUTPUT FROM: {agent_name}\n")
+            f.write(f"{'-'*60}\n")
+            f.write(f"{response}\n")
+        
+        if CONFIG.verbose_logging:
+            print(f"[{timestamp}] 📤 [{agent_name}] Output: {response[:100]}...")
 
 
 LOG = Logger(CONFIG.output_dir)
@@ -158,12 +204,107 @@ class ArxivTool:
     BASE_URL = "http://export.arxiv.org/api/query"
     
     @staticmethod
+    def extract_search_terms_with_llm(topic: str) -> List[str]:
+        """Use LLM to extract the best search terms from any topic"""
+        
+        prompt = f"""Extract 5-7 precise academic search keywords from this research topic.
+
+TOPIC: {topic}
+
+RULES:
+1. Output ONLY a JSON array of strings, nothing else
+2. Include technical terms, method names, and field-specific jargon
+3. Include both specific terms (e.g., "BERT", "ResNet") and general terms (e.g., "neural network")
+4. Do NOT include generic words like "paper", "research", "method", "technique", "approach"
+5. Each keyword should be 1-3 words max
+
+EXAMPLE OUTPUT:
+["machine unlearning", "catastrophic forgetting", "knowledge editing", "neural network", "gradient descent"]
+
+OUTPUT (JSON array only):"""
+
+        try:
+            response = ollama.chat(
+                model=CONFIG.model,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0.3}  # Low temp for consistent extraction
+            )
+            
+            content = response['message']['content']
+            
+            # Clean up response - extract JSON array
+            # Remove thinking tags if present
+            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+            content = content.strip()
+            
+            # Try to find JSON array
+            match = re.search(r'\[.*?\]', content, re.DOTALL)
+            if match:
+                keywords = json.loads(match.group())
+                # Filter out empty strings and clean up
+                keywords = [k.strip() for k in keywords if k.strip() and len(k.strip()) > 2]
+                LOG.info(f"LLM extracted keywords: {keywords}")
+                return keywords[:7]
+        except Exception as e:
+            LOG.warning(f"LLM keyword extraction failed: {e}")
+        
+        # Fallback: simple extraction
+        return ArxivTool.extract_search_terms_simple(topic)
+    
+    @staticmethod
+    def extract_search_terms_simple(topic: str) -> List[str]:
+        """Fallback: Extract terms without LLM"""
+        # Extract quoted phrases
+        quoted = re.findall(r'"([^"]+)"', topic)
+        
+        # Extract capitalized terms/acronyms
+        caps = re.findall(r'\b[A-Z][A-Za-z]*(?:\s+[A-Z][a-z]+)*\b', topic)
+        caps = [c for c in caps if c.lower() not in ['the', 'this', 'that', 'most', 'while', 'would', 'could', 'should']]
+        
+        # Extract hyphenated terms (often technical)
+        hyphenated = re.findall(r'\b\w+-\w+(?:-\w+)*\b', topic)
+        
+        # Combine and dedupe
+        keywords = list(set(quoted + caps[:5] + hyphenated[:3]))
+        
+        # If still nothing, use first significant words
+        if len(keywords) < 3:
+            words = topic.split()
+            keywords.extend([w for w in words[:10] if len(w) > 4 and w.lower() not in 
+                           ['would', 'could', 'should', 'their', 'there', 'these', 'those',
+                            'which', 'while', 'about', 'being', 'having', 'paper', 'method',
+                            'technique', 'approach', 'current', 'specific', 'without']])
+        
+        return list(set(keywords))[:6]
+    
+    @staticmethod
     @retry(max_attempts=3)
     @cache_result
-    def search(query: str, max_results: int = 10) -> List[Dict]:
+    def search(query: str, max_results: int = 10, use_category_filter: bool = True) -> List[Dict]:
         """Search arXiv and return paper metadata"""
+        
+        # If query is too long, it's probably a full topic - extract keywords
+        if len(query) > 100:
+            keywords = ArxivTool.extract_search_terms_with_llm(query)
+            query = ' '.join(keywords[:4])  # Use top 4 keywords
+        
+        # Clean up query
+        query = query.strip()
+        if not query:
+            LOG.warning("Empty query, cannot search arXiv")
+            return []
+        
+        LOG.info(f"arXiv search query: '{query}'")
+        
+        # Build search query
+        if use_category_filter:
+            # Try with CS categories first for better relevance
+            search_query = f'all:{query} AND (cat:cs.LG OR cat:cs.AI OR cat:cs.CL OR cat:cs.CV OR cat:cs.NE)'
+        else:
+            search_query = f'all:{query}'
+        
         params = {
-            'search_query': f'all:{query}',
+            'search_query': search_query,
             'start': 0,
             'max_results': max_results,
             'sortBy': 'relevance',
@@ -173,8 +314,19 @@ class ArxivTool:
         response = requests.get(ArxivTool.BASE_URL, params=params, timeout=30)
         response.raise_for_status()
         
-        # Parse XML response
-        root = ET.fromstring(response.content)
+        papers = ArxivTool._parse_arxiv_response(response.content)
+        
+        # If no results with category filter, try without
+        if not papers and use_category_filter:
+            LOG.warning("No results with CS filter, trying broader search...")
+            return ArxivTool.search(query, max_results, use_category_filter=False)
+        
+        return papers
+    
+    @staticmethod
+    def _parse_arxiv_response(content: bytes) -> List[Dict]:
+        """Parse arXiv API XML response"""
+        root = ET.fromstring(content)
         ns = {'atom': 'http://www.w3.org/2005/Atom'}
         
         papers = []
@@ -186,8 +338,13 @@ class ArxivTool:
                 if name is not None:
                     authors.append(name.text)
             
+            if not authors:
+                continue
+                
             # Get first author's last name for citation key
             first_author_last = authors[0].split()[-1] if authors else "Unknown"
+            # Clean author name for cite key
+            first_author_last = re.sub(r'[^a-zA-Z]', '', first_author_last)
             
             # Extract year from published date
             published = entry.find('atom:published', ns)
@@ -197,16 +354,20 @@ class ArxivTool:
             summary_elem = entry.find('atom:summary', ns)
             arxiv_id = entry.find('atom:id', ns)
             
+            if title_elem is None or not title_elem.text:
+                continue
+            
+            title = title_elem.text.strip().replace('\n', ' ')
+            
             # Generate citation key
-            title_word = re.sub(r'[^a-zA-Z]', '', 
-                              (title_elem.text.split()[0] if title_elem is not None else "paper")).lower()
+            title_word = re.sub(r'[^a-zA-Z]', '', title.split()[0] if title else "paper").lower()
             cite_key = f"{first_author_last.lower()}{year}{title_word}"
             
             papers.append({
-                'title': title_elem.text.strip().replace('\n', ' ') if title_elem is not None else "",
+                'title': title,
                 'authors': authors,
                 'year': year,
-                'abstract': summary_elem.text.strip().replace('\n', ' ')[:500] if summary_elem is not None else "",
+                'abstract': summary_elem.text.strip().replace('\n', ' ')[:500] if summary_elem is not None and summary_elem.text else "",
                 'arxiv_id': arxiv_id.text.split('/')[-1] if arxiv_id is not None else "",
                 'cite_key': cite_key,
                 'url': arxiv_id.text if arxiv_id is not None else ""
@@ -221,8 +382,11 @@ class ArxivTool:
         if len(paper['authors']) > 3:
             authors_str += " and others"
         
+        # Escape special characters in title
+        title = paper['title'].replace('&', '\\&').replace('%', '\\%').replace('_', '\\_')
+        
         return f"""@article{{{paper['cite_key']},
-    title={{{paper['title']}}},
+    title={{{title}}},
     author={{{authors_str}}},
     journal={{arXiv preprint arXiv:{paper['arxiv_id']}}},
     year={{{paper['year']}}},
@@ -240,7 +404,19 @@ class SemanticScholarTool:
     @retry(max_attempts=3)
     @cache_result
     def search(query: str, limit: int = 10) -> List[Dict]:
-        """Search for papers"""
+        """Search for papers with cleaned query"""
+        
+        # Clean and shorten query
+        if len(query) > 100:
+            # Extract just the key terms
+            words = query.split()
+            important_words = [w for w in words if len(w) > 4 and w.lower() not in 
+                             ['would', 'could', 'should', 'their', 'there', 'these', 'those', 
+                              'which', 'while', 'about', 'being', 'having', 'paper', 'method']]
+            query = ' '.join(important_words[:6])
+        
+        LOG.info(f"Semantic Scholar query: '{query}'")
+        
         url = f"{SemanticScholarTool.BASE_URL}/paper/search"
         params = {
             'query': query,
@@ -248,42 +424,49 @@ class SemanticScholarTool:
             'fields': 'title,authors,year,abstract,citationCount,url,externalIds'
         }
         
-        response = requests.get(url, params=params, timeout=30)
-        
-        if response.status_code == 429:  # Rate limited
-            time.sleep(5)
+        try:
             response = requests.get(url, params=params, timeout=30)
-        
-        if response.status_code != 200:
-            return []
-        
-        data = response.json()
-        papers = []
-        
-        for paper in data.get('data', []):
-            if not paper.get('title'):
-                continue
+            
+            if response.status_code == 429:  # Rate limited
+                LOG.warning("Semantic Scholar rate limited, waiting...")
+                time.sleep(5)
+                response = requests.get(url, params=params, timeout=30)
+            
+            if response.status_code != 200:
+                LOG.warning(f"Semantic Scholar returned status {response.status_code}")
+                return []
+            
+            data = response.json()
+            papers = []
+            
+            for paper in data.get('data', []):
+                if not paper.get('title'):
+                    continue
+                    
+                authors = [a.get('name', '') for a in paper.get('authors', [])[:5]]
+                first_author_last = authors[0].split()[-1] if authors else "Unknown"
+                year = str(paper.get('year', '2024') or '2024')
                 
-            authors = [a.get('name', '') for a in paper.get('authors', [])[:5]]
-            first_author_last = authors[0].split()[-1] if authors else "Unknown"
-            year = str(paper.get('year', '2024'))
+                title_word = re.sub(r'[^a-zA-Z]', '', 
+                                  paper['title'].split()[0]).lower()
+                cite_key = f"{first_author_last.lower()}{year}{title_word}"
+                
+                papers.append({
+                    'title': paper['title'],
+                    'authors': authors,
+                    'year': year,
+                    'abstract': (paper.get('abstract') or "")[:500],
+                    'citations': paper.get('citationCount', 0),
+                    'cite_key': cite_key,
+                    'url': paper.get('url', ''),
+                    'doi': paper.get('externalIds', {}).get('DOI', '')
+                })
             
-            title_word = re.sub(r'[^a-zA-Z]', '', 
-                              paper['title'].split()[0]).lower()
-            cite_key = f"{first_author_last.lower()}{year}{title_word}"
+            return papers
             
-            papers.append({
-                'title': paper['title'],
-                'authors': authors,
-                'year': year,
-                'abstract': (paper.get('abstract') or "")[:500],
-                'citations': paper.get('citationCount', 0),
-                'cite_key': cite_key,
-                'url': paper.get('url', ''),
-                'doi': paper.get('externalIds', {}).get('DOI', '')
-            })
-        
-        return papers
+        except Exception as e:
+            LOG.warning(f"Semantic Scholar search failed: {e}")
+            return []
 
 
 class DuckDuckGoTool:
@@ -320,41 +503,48 @@ class GrammarTool:
     Grammar and style checking - FREE, runs locally
     """
     _tool = None
+    _init_attempted = False
     
     @classmethod
     def get_tool(cls):
-        if cls._tool is None:
-            try:
-                import language_tool_python
-                cls._tool = language_tool_python.LanguageTool('en-US')
-            except ImportError:
-                LOG.warning("Grammar tool not available. Install: pip install language-tool-python")
-                return None
+        if cls._init_attempted:
+            return cls._tool
+            
+        cls._init_attempted = True
+        try:
+            import language_tool_python
+            LOG.info("Initializing grammar tool (first run downloads ~1GB)...")
+            cls._tool = language_tool_python.LanguageTool('en-US')
+            LOG.success("Grammar tool initialized")
+        except ImportError:
+            LOG.warning("Grammar tool not available. Install: pip install language-tool-python")
+        except Exception as e:
+            LOG.warning(f"Grammar tool init failed: {e}")
+        
         return cls._tool
     
     @classmethod
     def check(cls, text: str) -> Tuple[str, List[str]]:
         """Check grammar and return corrected text + issues found"""
+        if not CONFIG.enable_grammar_check:
+            return text, []
+            
         tool = cls.get_tool()
         if tool is None:
             return text, []
         
-        # Remove LaTeX commands for checking
-        clean_text = re.sub(r'\\[a-zA-Z]+(\{[^}]*\})?', '', text)
-        clean_text = re.sub(r'[\$\{\}\[\]]', '', clean_text)
-        
-        matches = tool.check(clean_text)
-        issues = [f"{m.ruleId}: {m.message}" for m in matches[:5]]  # Top 5 issues
-        
-        # Apply corrections to original text carefully
-        corrected = text
-        for match in reversed(matches):
-            if match.replacements:
-                # Only fix simple issues, not LaTeX
-                if not any(c in match.context for c in ['\\', '{', '}']):
-                    pass  # Skip complex fixes that might break LaTeX
-        
-        return text, issues
+        try:
+            # Remove LaTeX commands for checking
+            clean_text = re.sub(r'\\[a-zA-Z]+(\{[^}]*\})?', '', text)
+            clean_text = re.sub(r'[\$\{\}\[\]]', '', clean_text)
+            
+            matches = tool.check(clean_text)
+            issues = [f"{m.ruleId}: {m.message}" for m in matches[:5]]  # Top 5 issues
+            
+            return text, issues
+        except Exception as e:
+            LOG.warning(f"Grammar check failed: {e}")
+            return text, []
 
 
 class LaTeXLinter:
@@ -413,7 +603,7 @@ TOOLS = {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class Agent:
-    """Enhanced agent with tool access and better error handling"""
+    """Enhanced agent with tool access, thinking mode, and verbose logging"""
     
     def __init__(self, name: str, system_prompt: str, tools: List[str] = None):
         self.name = name
@@ -425,7 +615,10 @@ class Agent:
         """Execute a tool and return results"""
         if tool_name in TOOLS:
             try:
-                return TOOLS[tool_name](**kwargs)
+                LOG.info(f"[{self.name}] Executing tool: {tool_name}")
+                result = TOOLS[tool_name](**kwargs)
+                LOG.info(f"[{self.name}] Tool {tool_name} returned {len(str(result))} chars")
+                return result
             except Exception as e:
                 LOG.warning(f"Tool {tool_name} failed: {e}")
                 return None
@@ -433,7 +626,7 @@ class Agent:
     
     @retry(max_attempts=CONFIG.max_retries, delay=CONFIG.retry_delay)
     def think(self, user_input: str, use_tools: bool = True) -> str:
-        """Process input and generate response, optionally using tools first"""
+        """Process input and generate response with thinking mode"""
         LOG.agent(self.name, f"Processing: {user_input[:80]}...")
         
         # Build context from tools if needed
@@ -441,7 +634,6 @@ class Agent:
         if use_tools and self.tools:
             for tool_name in self.tools:
                 if tool_name == 'arxiv_search' and 'research' in self.name.lower():
-                    # Extract key terms for search
                     search_terms = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', user_input)
                     query = ' '.join(search_terms[:3]) if search_terms else user_input[:50]
                     results = self._execute_tool('arxiv_search', query=query, max_results=5)
@@ -451,22 +643,67 @@ class Agent:
                             tool_context += f"- {p['title']} ({p['year']}) [cite: {p['cite_key']}]\n"
         
         # Build messages
+        full_system_prompt = self.system_prompt + tool_context
         messages = [
-            {'role': 'system', 'content': self.system_prompt + tool_context}
+            {'role': 'system', 'content': full_system_prompt}
         ]
         
         # Add conversation history for context
-        messages.extend(self.conversation_history[-4:])  # Last 2 exchanges
+        messages.extend(self.conversation_history[-4:])
         messages.append({'role': 'user', 'content': user_input})
         
-        # Call model
-        response = ollama.chat(
-            model=CONFIG.model,
-            messages=messages,
-            options={'temperature': CONFIG.temperature}
-        )
+        # Log full input
+        LOG.verbose_input(self.name, f"SYSTEM: {full_system_prompt}\n\nUSER: {user_input}")
         
+        # Build options for ollama
+        options = {
+            'temperature': CONFIG.temperature,
+        }
+        
+        # Call model with or without thinking mode
+        try:
+            if CONFIG.enable_thinking:
+                # For Qwen3 models, thinking is enabled via the 'think' parameter
+                response = ollama.chat(
+                    model=CONFIG.model,
+                    messages=messages,
+                    options=options,
+                    think=True  # Enable thinking mode
+                )
+            else:
+                response = ollama.chat(
+                    model=CONFIG.model,
+                    messages=messages,
+                    options=options
+                )
+        except TypeError:
+            # Fallback if 'think' parameter not supported in this ollama version
+            LOG.warning(f"Thinking mode not supported, falling back to standard mode")
+            response = ollama.chat(
+                model=CONFIG.model,
+                messages=messages,
+                options=options
+            )
+        
+        # Extract content and thinking
         content = response['message']['content']
+        
+        # Check for thinking in response (Qwen3 format)
+        thinking_content = response['message'].get('thinking', '')
+        
+        # Also check if thinking is embedded in content with <think> tags
+        think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+        if think_match:
+            thinking_content = think_match.group(1)
+            # Remove thinking from content
+            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+        
+        # Log thinking if present
+        if thinking_content and CONFIG.log_thinking:
+            LOG.thinking(self.name, thinking_content)
+        
+        # Log full output
+        LOG.verbose_output(self.name, content)
         
         # Update history
         self.conversation_history.append({'role': 'user', 'content': user_input})
@@ -815,37 +1052,77 @@ class ResearchPaperGenerator:
             return False
     
     def phase2_research(self) -> bool:
-        """Phase 2: Gather research from real sources"""
+        """Phase 2: Gather research from real sources with LLM-guided searches"""
         LOG.phase("PHASE 2: RESEARCH & CITATION GATHERING")
         
-        # Search arXiv for relevant papers
-        LOG.info(f"Searching arXiv for: {self.topic}")
-        arxiv_papers = ArxivTool.search(self.topic, max_results=CONFIG.max_arxiv_results)
+        # Use LLM to extract optimal search keywords
+        LOG.info("Using LLM to extract search keywords...")
+        keywords = ArxivTool.extract_search_terms_with_llm(self.topic)
+        LOG.success(f"Keywords: {keywords}")
+        
+        all_arxiv_papers = []
+        
+        # Strategy 1: Search with LLM-extracted keywords (main search)
+        if keywords:
+            query1 = ' '.join(keywords[:4])
+            LOG.info(f"Search 1 - Main keywords: '{query1}'")
+            papers1 = ArxivTool.search(query1, max_results=10)
+            all_arxiv_papers.extend(papers1)
+            LOG.info(f"  → Found {len(papers1)} papers")
+        
+        # Strategy 2: Search with different keyword combinations
+        if len(keywords) > 3:
+            query2 = ' '.join(keywords[2:5])  # Different subset
+            LOG.info(f"Search 2 - Alt keywords: '{query2}'")
+            papers2 = ArxivTool.search(query2, max_results=8)
+            all_arxiv_papers.extend(papers2)
+            LOG.info(f"  → Found {len(papers2)} papers")
+        
+        # Strategy 3: If we have a plan, use title keywords too
+        if self.plan and 'title' in self.plan:
+            title_keywords = ArxivTool.extract_search_terms_simple(self.plan['title'])
+            if title_keywords:
+                query3 = ' '.join(title_keywords[:3])
+                LOG.info(f"Search 3 - From title: '{query3}'")
+                papers3 = ArxivTool.search(query3, max_results=5)
+                all_arxiv_papers.extend(papers3)
+                LOG.info(f"  → Found {len(papers3)} papers")
+        
+        # Deduplicate by title
+        seen_titles = set()
+        unique_papers = []
+        for p in all_arxiv_papers:
+            title_lower = p['title'].lower().strip()
+            if title_lower and title_lower not in seen_titles:
+                seen_titles.add(title_lower)
+                unique_papers.append(p)
+        
+        arxiv_papers = unique_papers
         
         if arxiv_papers:
-            LOG.success(f"Found {len(arxiv_papers)} papers on arXiv")
-            for p in arxiv_papers[:5]:
-                LOG.info(f"  - {p['title'][:60]}... [{p['cite_key']}]")
+            LOG.success(f"Found {len(arxiv_papers)} unique papers on arXiv")
+            for p in arxiv_papers[:7]:
+                LOG.info(f"  📄 {p['title'][:60]}... [{p['cite_key']}]")
         else:
-            LOG.warning("No arXiv papers found, searching with broader terms...")
-            # Try broader search
-            broad_terms = self.topic.split()[:2]
-            arxiv_papers = ArxivTool.search(' '.join(broad_terms), max_results=CONFIG.max_arxiv_results)
+            LOG.warning("No arXiv papers found!")
         
         # Also search Semantic Scholar
         LOG.info("Searching Semantic Scholar...")
-        ss_papers = SemanticScholarTool.search(self.topic, limit=10)
+        ss_query = ' '.join(keywords[:3]) if keywords else self.topic[:50]
+        ss_papers = SemanticScholarTool.search(ss_query, limit=10)
         
         if ss_papers:
             LOG.success(f"Found {len(ss_papers)} papers on Semantic Scholar")
+            for p in ss_papers[:3]:
+                LOG.info(f"  📄 {p['title'][:60]}... [{p['cite_key']}]")
         
-        # Combine and deduplicate
+        # Combine and deduplicate again
         self.all_papers = arxiv_papers + ss_papers
         seen_titles = set()
         unique_papers = []
         for p in self.all_papers:
-            title_lower = p['title'].lower()
-            if title_lower not in seen_titles:
+            title_lower = p['title'].lower().strip()
+            if title_lower and title_lower not in seen_titles:
                 seen_titles.add(title_lower)
                 unique_papers.append(p)
         self.all_papers = unique_papers
@@ -855,6 +1132,12 @@ class ResearchPaperGenerator:
             self.citations[p['cite_key']] = p
         
         LOG.success(f"Total unique papers for citation: {len(self.all_papers)}")
+        
+        # Log all papers to verbose log
+        if self.all_papers:
+            paper_summary = "\n".join([f"  - [{p['cite_key']}] {p['title']}" for p in self.all_papers])
+            LOG.info(f"All available citations:\n{paper_summary}")
+        
         save_checkpoint({'papers': self.all_papers, 'citations': self.citations}, 'research')
         
         return len(self.all_papers) > 0
@@ -1177,8 +1460,18 @@ def main():
 ║                                                              ║
 ║  Fully autonomous - just enter a topic and wait!             ║
 ║  Uses real citations from arXiv & Semantic Scholar           ║
+║  LLM-powered keyword extraction for any domain               ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
+    
+    # Show current settings
+    print(f"⚙️  Settings:")
+    print(f"   • Model: {CONFIG.model}")
+    print(f"   • Thinking mode: {'✅ ON' if CONFIG.enable_thinking else '❌ OFF'}")
+    print(f"   • Verbose logging: {'✅ ON' if CONFIG.verbose_logging else '❌ OFF'}")
+    print(f"   • Grammar check: {'✅ ON' if CONFIG.enable_grammar_check else '❌ OFF'}")
+    print(f"   • Output dir: {CONFIG.output_dir}/")
+    print()
     
     print("📝 Enter your research topic: ", end='')
     topic = input().strip()
@@ -1203,6 +1496,11 @@ def main():
 ║  📁 Output folder: {CONFIG.output_dir:<40} ║
 ║  📄 Main file: {CONFIG.main_tex:<44} ║
 ║  📚 References: references.bib                               ║
+║                                                              ║
+║  📋 LOG FILES:                                               ║
+║  • research.log   - Main progress log                        ║
+║  • thinking.log   - Model reasoning/thinking                 ║
+║  • verbose.log    - All inputs & outputs                     ║
 ╚══════════════════════════════════════════════════════════════╝
         """)
     else:
