@@ -667,45 +667,87 @@ class Agent:
         
         if CONFIG.enable_thinking:
             # Stream to capture both thinking and content
-            LOG.info(f"[{self.name}] Streaming with thinking enabled...")
+            print(f"   ⏳ [{self.name}] Waiting for model response...", flush=True)
             
-            stream = ollama.chat(
-                model=CONFIG.model,
-                messages=messages,
-                options={'temperature': CONFIG.temperature},
-                think=True,  # Enable thinking - direct parameter!
-                stream=True,
-            )
-            
-            in_thinking = False
-            for chunk in stream:
-                # Handle thinking chunks
-                if hasattr(chunk, 'message'):
-                    if hasattr(chunk.message, 'thinking') and chunk.message.thinking:
-                        if not in_thinking:
-                            in_thinking = True
-                            if CONFIG.verbose_logging:
-                                print(f"   🧠 [{self.name}] Thinking...", flush=True)
-                        thinking_content += chunk.message.thinking
+            try:
+                stream = ollama.chat(
+                    model=CONFIG.model,
+                    messages=messages,
+                    options={'temperature': CONFIG.temperature},
+                    think=True,  # Enable thinking
+                    stream=True,
+                )
+                
+                thinking_started = False
+                content_started = False
+                chunk_count = 0
+                
+                for chunk in stream:
+                    chunk_count += 1
                     
-                    # Handle content chunks
-                    if hasattr(chunk.message, 'content') and chunk.message.content:
-                        if in_thinking:
-                            in_thinking = False
-                        content += chunk.message.content
-            
-            # Log thinking if captured
-            if thinking_content and CONFIG.log_thinking:
-                LOG.thinking(self.name, thinking_content)
+                    # Handle thinking chunks
+                    if hasattr(chunk, 'message') and chunk.message:
+                        # Check for thinking
+                        chunk_thinking = getattr(chunk.message, 'thinking', None)
+                        if chunk_thinking:
+                            if not thinking_started:
+                                thinking_started = True
+                                print(f"   🧠 [{self.name}] Thinking", end='', flush=True)
+                            if chunk_count % 20 == 0:  # Print dot every 20 chunks
+                                print(".", end='', flush=True)
+                            thinking_content += chunk_thinking
+                        
+                        # Check for content
+                        chunk_content = getattr(chunk.message, 'content', None)
+                        if chunk_content:
+                            if thinking_started and not content_started:
+                                content_started = True
+                                print(f" ({len(thinking_content)} chars)", flush=True)
+                                print(f"   ✍️  [{self.name}] Writing", end='', flush=True)
+                            elif not content_started:
+                                content_started = True
+                                print(f"   ✍️  [{self.name}] Writing", end='', flush=True)
+                            
+                            if len(content) % 500 == 0 and len(content) > 0:
+                                print(".", end='', flush=True)
+                            content += chunk_content
+                
+                # Finish progress line
+                if content_started:
+                    print(f" ({len(content)} chars) ✓", flush=True)
+                elif thinking_started:
+                    print(" ✓", flush=True)
+                else:
+                    print(f"   ⚠️  [{self.name}] No response chunks received", flush=True)
+                
+                # Log thinking if captured
+                if thinking_content and CONFIG.log_thinking:
+                    LOG.thinking(self.name, thinking_content)
+                    
+            except Exception as e:
+                LOG.warning(f"Streaming failed: {e}, falling back to non-streaming")
+                # Fallback to non-streaming
+                print(f"   🔄 [{self.name}] Retrying without streaming...", flush=True)
+                response = ollama.chat(
+                    model=CONFIG.model,
+                    messages=messages,
+                    options={'temperature': CONFIG.temperature},
+                    stream=False,
+                )
+                content = response.message.content
+                print(f"   ✓ [{self.name}] Response received", flush=True)
         else:
             # Non-streaming, no thinking
+            print(f"   ⏳ [{self.name}] Generating response...", flush=True)
             response = ollama.chat(
                 model=CONFIG.model,
                 messages=messages,
                 options={'temperature': CONFIG.temperature},
+                think=False,
                 stream=False,
             )
             content = response.message.content
+            print(f"   ✓ [{self.name}] Done ({len(content)} chars)", flush=True)
         
         # Log full output
         LOG.verbose_output(self.name, content)
